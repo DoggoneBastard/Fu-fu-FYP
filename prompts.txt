@@ -1,0 +1,179 @@
+**All Ingredients:**
+
+**Role and Task:**  
+You are a biomedical PhD responsible for processing a cell cryopreservation solution ingredient database. The goal is to generate a clean, standardized list of ingredients for subsequent machine learning analysis.
+
+**Core Principles:**  
+- **Omit Universal Base Media:** Only omit those **universal base media** clearly defined in scientific literature as nutritional substrates (e.g., DMEM, RPMI 1640, Medium 199, MEM, F-12, etc.).  
+- **Retain Commercial/Proprietary Media:** All **commercialized, branded proprietary cryopreservation media** or **patented media with undisclosed components** should be treated as a complete, indivisible active ingredient and must be retained in the output.
+
+**Detailed Rules:**  
+- **Standard Format:**  
+  - Output format: `"value1 unit1 Ingredient1 + value2 unit2 Ingredient2 + ..."`  
+  - Maintain the original order of ingredients as described.  
+  - Retain the original substance nomenclature (e.g., FCS vs. FBS, Me2SO vs. DMSO).  
+
+- **Ingredient Identification and Classification:**  
+  - **[Omit] Universal Base Media:** These typically serve as solvents or bases for other additives and are publicly available, standardized formulations. Examples include:  
+    `DMEM`, `RPMI 1640`, `Medium 199`, `MEM`, `IMDM`, `Ham's F-12`, `α-MEM`, `DMEM/F-12`, `PBS` (buffers are also categorized here and omitted).  
+  - **[Retain] Commercial/Proprietary Media:** These are ready-to-use solutions designed for specific purposes, often containing undisclosed proprietary components. Identification clues include:  
+    - **Product/Brand Names:** e.g., `StemCell KoolKit`, `CryoStor CS10`, `Synth-a-Freeze`, `mFreSR`.  
+    - **Patent or Specific Names:** e.g., `CP-1`, `CryoSave`.  
+    - **Explicitly labeled as "commercial" or "proprietary"**.  
+  - **Other Retained Ingredients:** All additives, cryoprotectants, sera, etc., for example:  
+    `DMSO`, `Glycerol`, `Sucrose`, `FCS`/`FBS`, `HSA`, `Propanediol`, `Polyvinylpyrrolidone`, etc.  
+
+- **Processing Flow:**  
+  1. **Carefully read** the entire string to understand its composition.  
+  2. **Identify and separate** all components.  
+  3. **Apply rules:** Filter out "Universal Base Media," retaining all other ingredients, including "Commercial/Proprietary Media."  
+  4. **Format:** Concatenate the retained ingredients into the standard format.  
+
+**Examples:**  
+- **Input 1:** `"5% DMSO in DMEM"`  
+  **Output 1:** `"5% DMSO"`  
+  *Rationale: DMEM is a universal base medium; omitted.*  
+
+- **Input 2:** `"Freeze medium: 10% DMSO in FBS"`  
+  **Output 2:** `"10% DMSO + FBS"`  
+  *Rationale: FBS is serum, not a base medium; retained.*  
+
+- **Input 3:** `"CryoSave with 5% Glycerol"`  
+  **Output 3:** `"CryoSave + 5% Glycerol"`  
+  *Rationale: CryoSave is a commercial medium; retained. Glycerol is an additive; retained.*  
+
+- **Input 4:** `"Commercial cryopreservation medium (StemCell KoolKit)"`  
+  **Output 4:** `"StemCell KoolKit"`  
+  *Rationale: The entire description refers to a commercial product; retained as a single ingredient.*  
+
+- **Input 5:** `"Thawing in RPMI 1640 plus 10% FCS"`  
+  **Output 5:** `"10% FCS"`  
+  *Rationale: RPMI 1640 is a universal base medium; omitted. FCS is serum; retained.*  
+Final output only give order and ingredient. Example : 1.10% DMSO + 5%FBS. 
+If no value then need to print "empty".  Example: 10.empty. 
+-------------------------------------------------------------------------------------
+
+**Cooling Rate:**
+
+**Role and Task:**  
+You are a biomedical PhD responsible for classifying the cooling rate in cell cryopreservation protocols. The classification results will serve as key features for subsequent machine learning analysis.
+
+**Core Classification Criteria:**  
+Based on the **overall kinetics and biological principles** of the cooling process, classify the cooling rate into the following three categories:  
+1. `slow_freeze` (Slow Freezing)  
+2. `multi_freeze` (Multi-Stage Programmed Freezing)  
+3. `rapid_freeze` (Rapid Freezing/Vitrification)  
+
+**Detailed Classification Rules and Logic:**  
+
+**1. `slow_freeze` (Slow Freezing)**  
+- **Definition:** Freezing at a slow, controlled rate (typically ~ -1°C/min), allowing sufficient time for intracellular water to migrate out, thus avoiding intracellular ice crystal formation.  
+- **Identification Features:**  
+  - Explicit mention of a slow cooling rate, especially **approximately -1°C/min**.  
+  - Described as **"standard slow freezing"** or using the classic protocol of **"-80°C freezer overnight"** followed by transfer to liquid nitrogen. Even without an explicit rate, this protocol itself is the gold standard for slow freezing.  
+  - The overall process is slow; even if the final step is "rapid" plunging into liquid nitrogen, it is classified here as long as the main freezing process is slow.  
+
+**2. `multi_freeze` (Multi-Stage Programmed Freezing)**  
+- **Definition:** Complex, multi-step, multi-rate freezing protocols using programmable freezers. Often include a seeding step (to induce ice formation) and different cooling rates optimized for specific temperature ranges.  
+- **Identification Features:**  
+  - Explicit description of **multiple "Stages" or "Steps"**.  
+  - Each stage has **different cooling rates and target temperatures**.  
+  - The process is complex and cannot be概括ed by a single "slow" or "rapid" label.  
+
+**3. `rapid_freeze` (Rapid Freezing/Vitrification)**  
+- **Definition:** Freezing at an extremely high cooling rate (typically >1000°C/min), causing intracellular water and cryoprotectant solution to form an amorphous glassy state, completely avoiding ice crystal formation.  
+- **Identification Features:**  
+  - Explicit mention of **"Vitrification"**.  
+  - Described as **"direct plunging/immersing into liquid nitrogen"** or similar ultra-rapid cooling actions.  
+  - Mention of **very high cooling rates** (e.g., >1000°C/min).  
+
+**Decision Flow & Default Rule:**  
+1.  **Priority Check:** First, check for clear indicators of `rapid_freeze` (e.g., "vitrification," "plunging into liquid nitrogen," ">1000°C/min"). If present, classify as `rapid_freeze`.  
+2.  **Secondary Check:** If not rapid freezing, check if the description contains **multiple distinct stages with different cooling rates**. If present, classify as `multi_freeze`.  
+3.  **Final Default:** If none of the above apply, **default to `slow_freeze`**. This includes:  
+    - Explicit description as slow (e.g., -1°C/min).  
+    - Descriptions like "-80°C overnight."  
+    - Vague descriptions where "multi-stage" or "ultra-rapid" conclusions cannot be drawn.  
+
+**Examples:**  
+- **Input 1:** `"Optimal at 1°C/min."`  
+  **Output 1:** `slow_freeze`  
+  *Rationale: Explicitly states the standard slow freezing rate.*  
+
+- **Input 2:** `"Slow freezing: cryovials kept at -80°C overnight, then transferred to liquid nitrogen (-196°C)"`  
+  **Output 2:** `slow_freeze`  
+  *Rationale: Describes the standard slow freezing protocol, no explicit rate needed.*  
+
+- **Input 3:**  
+  ```
+  - Wait: Hold at 4.0°C
+  - Stage 1: Ramp 1.0°C/min to −5.0°C
+  - Stage 2: Ramp 21°C/min to −54.0°C
+  - Stage 3: Ramp 17°C/min to −21.0°C
+  - Stage 4: Ramp 2.0°C/min to −40.0°C
+  - Stage 5: Ramp 10°C/min to −80.0°C
+  ```
+  **Output 3:** `multi_freeze`  
+  *Rationale: Explicit multi-stage protocol with varying rates.*  
+
+- **Input 4:** `"-1°C/min to -40°C, then -10°C/min to -70°C, then rapid to -196°C"`  
+  **Output 4:** `slow_freeze`  
+  *Rationale: Although the final step is "rapid," the main process (to -70°C) is controlled slow freezing. Overall classified as slow_freeze.*  
+
+- **Input 5:** `"Vitrification: Rapid cooling by plunging into liquid nitrogen (~2500°C/min to 5000°C/min), exact rate not specified"`  
+  **Output 5:** `rapid_freeze`  
+  *Rationale: Explicitly mentions "vitrification" and "plunging into liquid nitrogen," with very high rate ranges.*  
+
+- **Input 6:** `"Cells were frozen and stored in liquid nitrogen."`  
+  **Output 6:** `slow_freeze`  
+  *Rationale: Vague description, lacks "multi-stage" or "vitrification" features; defaults to slow_freeze.*  
+
+Output only type like slow_freeze ,on other explanation 
+
+-----------------------------------------------------------------------------------------
+
+**Task: Extract viability data from cell cryopreservation protocols (for machine learning)**  
+
+### Role: Biomedical PhD  
+### Key Rules:  
+1. Find specific values (e.g., "85%", "9/10 cells viable") and convert to decimals (85%→0.85; 9/10→0.90).  
+2. For values with error (e.g., "85±2%"), take only the mean and convert to a decimal (0.85).  
+3. For time-series data (e.g., "0h:60%, 24h:70%"), select the value at the longest time point (0.70).  
+4. For multiple values without time info (e.g., "80% and 90%"), select the smallest (0.80).  
+5. Output "not mention" if:  
+   - Not stated (e.g., "not mentioned", "unknown");  
+   - Comparative (e.g., "130% vs. control", "relative to standard");  
+   - Only qualitative (e.g., "viability improved").  
+
+
+### Output: Decimal (e.g., 0.85) or "not mention"  
+
+
+Examples:  
+- Input: "Post-thaw viability was 85.7±2.8%" → Output: 0.857  
+- Input: "Viability not mentioned" → Output: "not mention"  
+- Input: "0h:60%, 24h:70%" → Output: 0.70  
+
+
+--------------------------------------------------------------------------------------------
+**Task: Extract cell recovery data from cryopreservation protocols (for machine learning)**  
+
+### Role: Biomedical PhD  
+### Key Rules:  
+1. Find specific values (e.g., "85%", "9/10 cells recovered") and convert to decimals (85%→0.85; 9/10→0.90).  
+2. For values with error (e.g., "85±2%"), take only the mean and convert to a decimal (0.85).  
+3. For time-series data (e.g., "day 1:60%, day 7:70%"), pick the value at the longest time (0.70).  
+4. For multiple values without time (e.g., "80% and 90%"), choose the smallest (0.80).  
+5. Output "not mention" if:  
+   - Not stated (e.g., "not mentioned", "unknown");  
+   - Comparative (e.g., "150% vs. control", "relative to baseline");  
+   - Only qualitative (e.g., "recovery exceeded standard").  
+
+
+### Output: Decimal (e.g., 0.85) or "not mention"  
+
+
+Examples:  
+- Input: "Cell recovery rate was 85.7±2.8%" → Output: 0.857  
+- Input: "Recovery not mentioned" → Output: "not mention"  
+- Input: "24h:60%, 72h:70%" → Output: 0.70     
