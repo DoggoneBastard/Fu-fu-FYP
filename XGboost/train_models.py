@@ -46,11 +46,11 @@ def train_and_save_models():
     
     # --- Data Loading and Preprocessing ---
     try:
-        # Load data from the parent directory
-        df = pd.read_csv('../final_data.csv', encoding='utf-8-sig')
-        print("Successfully loaded 'final_data.csv'.")
+        # Load the optimized dataset from the CV optimizer
+        df = pd.read_csv('../Viability_Optimization_Project/best_swapped_data_cv.csv', encoding='utf-8-sig')
+        print("Successfully loaded 'best_swapped_data_cv.csv'.")
     except FileNotFoundError:
-        print("ERROR: 'final_data.csv' not found. Please ensure the file is present.")
+        print("ERROR: 'best_swapped_data_cv.csv' not found. Please ensure the file is present.")
         return
 
     # Standardize column names to lowercase
@@ -61,10 +61,15 @@ def train_and_save_models():
     for target in targets:
         if target in df.columns:
             df[target] = clean_target_column(df[target])
-    
+
     # --- Feature Engineering ---
+    # One-hot encode categorical features
+    if 'cooling_rate' in df.columns:
+        df = pd.get_dummies(df, columns=['cooling_rate'], dummy_na=False)
+        print("Successfully one-hot encoded 'cooling_rate'.")
+
     # Define columns that are not features
-    non_feature_cols = ['name', 'cooling_rate', 'doubling_time_h', 'doubling time', 'all_ingredient'] + targets
+    non_feature_cols = ['doubling time', 'all_ingredient'] + targets
     # Select potential numerical features
     potential_feature_cols = [col for col in df.columns if df[col].dtype in [np.float64, np.int64]]
     # Final list of features by excluding non-feature columns
@@ -81,60 +86,64 @@ def train_and_save_models():
     
     print(f"Found {len(feature_cols)} potential features for training.")
 
-    # --- Model Training Loop ---
-    # Create a directory to save the models if it doesn't exist
+    # --- Model Training and Evaluation Loop ---
     models_dir = 'trained_models'
     if not os.path.exists(models_dir):
         os.makedirs(models_dir)
         print(f"Created directory: '{models_dir}'")
 
-    # Loop through each target to train a separate model
     for target in targets:
-        print(f"\n--- Training model for: {target.replace('_', ' ').title()} ---")
+        print(f"\n--- Processing model for: {target.replace('_', ' ').title()} ---")
         
-        # Check if the target column exists
-        if target not in df.columns:
-            print(f"Target column '{target}' not found in data. Skipping.")
-            continue
-
-        # Prepare data for the current target: drop rows where the target is missing
+        # Prepare data for the current target
         df_target = df.dropna(subset=[target])
         
-        # Ensure there is enough data to train a model
         if len(df_target) < 10:
-            print(f"Insufficient data for '{target}' (only {len(df_target)} rows). Skipping model training.")
+            print(f"Insufficient data for '{target}' (only {len(df_target)} rows). Skipping.")
             continue
             
-        print(f"Using {len(df_target)} rows for training.")
+        X = df_target[feature_cols]
+        y = df_target[target]
         
-        # Define features (X) and target (y)
-        X = df_target[feature_cols].fillna(0) # Fill any remaining NaNs in features with 0
-        y_target = df_target[target]
-        
-        # Split data into training and testing sets
-        X_train, X_test, y_train, y_test = train_test_split(X, y_target, test_size=0.2, random_state=42)
-        
-        # Initialize and train the XGBoost Regressor model
+        # --- Train/Test Split ---
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+        print(f"Data split into {len(X_train)} training and {len(X_test)} testing samples.")
+
+        # Initialize the XGBoost Regressor model
         model = xgb.XGBRegressor(
             objective='reg:squarederror', n_estimators=200, learning_rate=0.05,
             max_depth=6, subsample=0.8, colsample_bytree=0.8,
-            random_state=42, n_jobs=-1 # Use all available CPU cores
+            random_state=42, n_jobs=-1
         )
+        
+        # --- Model Training and Evaluation ---
         model.fit(X_train, y_train)
+        preds = model.predict(X_test)
+        score = r2_score(y_test, preds)
         
-        # Evaluate the model on the test set using R² score
-        predictions = model.predict(X_test)
-        r2 = r2_score(y_test, predictions)
-        print(f"Model for {target.replace('_', ' ').title()} trained. R² score on test set: {r2:.4f}")
+        print(f"Single Train/Test Split R² score: {score:.4f}")
+
+        # --- Final Model Training ---
+        print("\nTraining final model on the entire dataset...")
+        model.fit(X, y)
         
-        # --- Save the Trained Model ---
+        # --- Feature Importance ---
+        importances = model.feature_importances_
+        feature_names = X.columns
+        feature_importance_df = pd.DataFrame({'feature': feature_names, 'importance': importances})
+        feature_importance_df = feature_importance_df.sort_values(by='importance', ascending=False)
+        
+        print(f"\n--- Top 5 Most Important Features for: {target.replace('_', ' ').title()} ---")
+        print(feature_importance_df.head(5).to_string(index=False))
+        
+        # --- Save the Final Trained Model ---
         model_filename = f"{target.replace('_', ' ').title()}_model.joblib"
         model_path = os.path.join(models_dir, model_filename)
         joblib.dump(model, model_path)
-        print(f"Model saved to: {model_path}")
+        print(f"\nFinal model saved to: {model_path}")
 
     print(f"\n{'='*50}")
-    print("Success! Viability and Recovery models have been trained and saved.")
+    print("Success! Models have been evaluated with CV and final versions saved.")
     print(f"{'='*50}")
 
 if __name__ == '__main__':

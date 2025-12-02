@@ -2,27 +2,25 @@ import pandas as pd
 import numpy as np
 import os
 import joblib
-from scipy.optimize import differential_evolution
+from scipy.optimize import differential_evolution, LinearConstraint
 
 def get_feature_bounds(feature_cols, data_df):
     """
     Defines the search space (bounds) for each feature for the optimization algorithm.
-
-    The bounds are determined by the minimum and maximum values of each feature in the
-    provided dataset. The upper bound is slightly increased (by 10%) to allow the
-    optimization to explore values just outside the observed range.
-
-    Args:
-        feature_cols (list): A list of column names to be used as features.
-        data_df (pd.DataFrame): The DataFrame containing the data.
-
-    Returns:
-        list: A list of tuples, where each tuple represents the (min, max) bounds for a feature.
     """
     bounds = []
     for feature in feature_cols:
-        min_val = data_df[feature].min()
-        max_val = data_df[feature].max()
+        # Replace infinite values with NaN so they can be ignored by max
+        feature_data = data_df[feature].replace([np.inf, -np.inf], np.nan)
+        max_val = feature_data.max()
+
+        if pd.isna(max_val):
+            max_val = 1 # Default max for problematic columns
+            print(f"Warning: Feature '{feature}' contains only NaN or infinite values. Using default max bound of 1.")
+
+        # The lower bound for any ingredient should always be 0.
+        min_val = 0
+        
         # Set the upper bound to 110% of the max value to allow exploration
         bounds.append((min_val, max_val * 1.1)) 
     return bounds
@@ -81,11 +79,17 @@ def run_optimization_instance(weights, models, feature_cols, bounds, dmso_index,
     print(f"\n--- Running Scenario: {scenario_name} ---")
     print(f"Weights: {weights}")
     
-    # Run the differential evolution algorithm
+    # The constraint for the sum of ingredients has been removed as per the new strategy.
+    # num_features = len(feature_cols)
+    # constraint_matrix = np.ones((1, num_features))
+    # linear_constraint = LinearConstraint(constraint_matrix, [100], [100])
+
+    # Run the differential evolution algorithm without the sum constraint
     result = differential_evolution(
         func=objective_function,
         bounds=bounds,
         args=(models, feature_cols, weights, dmso_index),
+        # The 'constraints' parameter is completely removed.
         strategy='best1bin', maxiter=130, popsize=20, tol=0.01,
         mutation=(0.5, 1), recombination=0.7, seed=42, disp=True
     )
@@ -122,7 +126,7 @@ def main():
     
     # Define paths for models and data
     models_dir = 'trained_models'
-    data_path = '../final_data.csv' # Relative path to the parent directory
+    data_path = '../Viability_Optimization_Project/best_swapped_data_cv.csv' # Relative path to the parent directory
     
     # Check if required files and directories exist
     if not (os.path.exists(models_dir) and os.path.exists(data_path)):
@@ -232,6 +236,35 @@ def main():
     display_cols = ['scenario', 'predicted_viability', 'predicted_recovery', 'dmso']
     print("The summary of best results:")
     print(final_df[display_cols].round(4))
+
+    print("\n--- Top 5 Ingredients in Optimal Formulations (Rescaled to 100%) ---")
+    # Get the list of feature columns that are in the final dataframe
+    ingredient_cols = [col for col in feature_cols if col in final_df.columns]
+
+    for index, row in final_df.iterrows():
+        print(f"\n--- Scenario: {row['scenario']} ---")
+        
+        # Extract ingredient concentrations for the current scenario
+        concentrations = row[ingredient_cols]
+        
+        # Sort ingredients by concentration, descending, and filter out negligible amounts
+        top_5_ingredients = concentrations[concentrations > 0.01].sort_values(ascending=False).head(5)
+        
+        if top_5_ingredients.empty:
+            print("  No significant ingredients found (> 0.01) to generate a top 5 list.")
+        else:
+            # Rescale the top 5 to sum to 100%
+            total_concentration = top_5_ingredients.sum()
+            if total_concentration > 0:
+                scaling_factor = 100 / total_concentration
+                rescaled_top_5 = top_5_ingredients * scaling_factor
+                
+                print("Top 5 Ingredients (Rescaled to 100%):")
+                for component, value in rescaled_top_5.items():
+                    print(f"  - {component}: {value:.2f}%")
+            else:
+                print("  Top 5 ingredients have concentrations too low to rescale.")
+
 
 if __name__ == '__main__':
     main()

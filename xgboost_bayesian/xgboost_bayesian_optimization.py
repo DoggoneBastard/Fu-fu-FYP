@@ -14,11 +14,11 @@ warnings.filterwarnings('ignore', category=FutureWarning)
 
 # --- Global Configuration ---
 # Path to the input file, relative to the script's location
-INPUT_FILE = '../final_data.csv' 
+INPUT_FILE = '../Viability_Optimization_Project/best_swapped_data_cv.csv' 
 # Path to the output file that will be created by the preprocessing step
 PROCESSED_FILE = 'ml_ready_data.csv'
 # Define non-feature columns to accurately identify features in various stages
-NON_FEATURE_COLS = ['viability', 'recovery', 'doubling time (h)', 'cooling rate', 'all_ingredient']
+NON_FEATURE_COLS = ['viability', 'recovery', 'doubling time (h)', 'doubling time', 'cooling rate', 'all_ingredient']
 
 
 def preprocess_data_for_ml(input_path, output_path):
@@ -182,11 +182,32 @@ def find_optimal_protocol(df, target_cols, weights):
     predicted_score = -result.fun
     
     print(f"Optimal Cooling Rate: {optimal_protocol.pop('cooling rate')}")
-    print("Optimal Ingredient Combination (concentration > 0.01):")
-    for component, value in optimal_protocol.items():
-        if value > 0.01:
-            print(f"  - {component}: {value:.4f}")
+
+    # Filter for significant ingredients and convert to a Series for sorting
+    significant_ingredients = {k: v for k, v in optimal_protocol.items() if v > 0.01}
+    
+    if not significant_ingredients:
+        print("Optimal Ingredient Combination: No significant ingredients found (> 0.01).")
+    else:
+        # Sort and get top 5
+        top_5_ingredients = pd.Series(significant_ingredients).sort_values(ascending=False).head(5)
+        
+        # Rescale the top 5 to sum to 100%
+        total_concentration = top_5_ingredients.sum()
+        if total_concentration > 0:
+            scaling_factor = 100 / total_concentration
+            rescaled_top_5 = top_5_ingredients * scaling_factor
             
+            print("Top 5 Ingredients (Rescaled to 100%):")
+            for component, value in rescaled_top_5.items():
+                print(f"  - {component}: {value:.2f}%")
+        else:
+            # This case is unlikely if significant_ingredients is not empty, but good practice to have
+            print("Top 5 Ingredients: Concentrations are too low to rescale.")
+            print("Original Top 5 concentrations:")
+            for component, value in top_5_ingredients.items():
+                print(f"  - {component}: {value:.4f}")
+
     print(f"\nModel's Predicted Theoretical Maximum Composite Score: {predicted_score:.4f}")
     return predicted_score
 

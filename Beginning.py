@@ -68,8 +68,7 @@ def clean_data(file_path='Data_raw.xlsx'):
     # Provide guidance for the user on the next steps
     print("\n--- Next Steps: Data Formatting ---")
     print("Please use an AI assistant to format the following columns based on the instructions in your README and paste them back:")
-    print("Here suggest you to use Deepseek or chatgpt,do not use Doubao")
-    print("- all_ingredient")
+    print("Here suggest you to use Deepseek or chatgpt,or use Doubao")
     print("- cooling rate")
     print("- Recovery")
     print("- Viability")

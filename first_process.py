@@ -11,19 +11,21 @@ FINAL_COLS_TO_KEEP = ['viability', 'recovery', 'doubling time', 'cooling rate']
 
 # Define valid units for parsing and units to be ignored
 VALID_UNITS = {'M', 'mM', '%', 'µM', 'µg/mL', 'ng/mL', 'mg/ml', 'nM', 'mmol/L', 'mol/L'}
-UNITS_TO_IGNORE = ['wt', '(wt)', 'v/v']
+UNITS_TO_IGNORE = ['wt', '(wt)', 'v/v','w/w']
 
 # Define synonym groups for ingredients
 SYNONYM_GROUPS = [
-    ['1,2-propanediol', 'propylene glycol'],
+    ['1,2-propanediol', 'propylene glycol', 'proh'],
     ['dmso', 'me2so'],
     ['ectoin', 'ectoine'],
-    ['eg', 'ethylene glycol'],
+    ['eg', 'ethylene glycol', 'ethyleneglycol'],
     ['fbs', 'fcs', 'fetal bovine serum', 'fetal calf serum'],
-    ['hes', 'hydroxyethyl starch'],
+    ['hes', 'hydroxyethyl starch', 'hes450', 'hydroxychyl starch'],
     ['hs', 'human serum'],
-    ['hsa', 'human albumin', 'human serum albumin'],
-    ['mc', 'methylcellulose']
+    ['hsa', 'human albumin', 'human serum albumin', 'has'],
+    ['mc', 'methylcellulose'],
+    ['ha', 'hmw-ha'],
+    ['dextran', 'dextran-40']
 ]
 
 def load_and_prepare_data(input_path):
@@ -514,6 +516,83 @@ def process_ingredients(input_path='Data_raw.csv', output_path='processed_data.c
     except Exception as e:
         print(f"Error saving the file: {e}")
 
-if __name__ == '__main__':
+#if __name__ == '__main__':
     # Run the processing function when the script is executed
-    process_ingredients()
+    #process_ingredients()
+
+
+def resolve_conflicts(df):
+    """
+    Identifies and resolves conflicts where the same substance has multiple unit types (e.g., % and M).
+    It now also removes rows corresponding to the data in the removed column.
+    """
+    print("\n--- Resolving Substance Unit Conflicts ---")
+    substance_cols = {}
+    for col in df.columns:
+        match = re.match(r'(.+?)\s*\(', col)
+        if match:
+            substance = match.group(1).lower().strip()
+            if substance not in substance_cols:
+                substance_cols[substance] = []
+            substance_cols[substance].append(col)
+
+    cols_to_remove = []
+    rows_to_remove_indices = set()
+
+    for substance, cols in substance_cols.items():
+        if len(cols) > 1:
+            print(f"\nFound conflict for substance '{substance}':")
+            # Sort by count to suggest keeping the most common one
+            cols_with_counts = sorted([(c, df[c].notna().sum()) for c in cols], key=lambda x: x[1], reverse=True)
+            
+            primary_col, primary_count = cols_with_counts[0]
+            print(f"  - Keeping primary: '{primary_col}' ({primary_count} entries)")
+
+            for col_to_check, count in cols_with_counts[1:]:
+                print(f"  - Suggest removing: '{col_to_check}' ({count} entries)")
+                
+                # Find rows that have data in this column
+                rows_with_data_mask = df[col_to_check].notna()
+                num_rows_with_data = rows_with_data_mask.sum()
+
+                prompt = f"    Do you want to remove '{col_to_check}'?"
+                if num_rows_with_data > 0:
+                    prompt += f" This will also delete the {num_rows_with_data} corresponding row(s) of data. [y/n]: "
+                else:
+                    prompt += " [y/n]: "
+                
+                user_input = input(prompt).lower().strip()
+                if user_input == 'y':
+                    cols_to_remove.append(col_to_check)
+                    # Collect indices of rows to be removed
+                    rows_to_remove_indices.update(df[rows_with_data_mask].index)
+
+    if cols_to_remove:
+        print("\n--- Applying Changes ---")
+        
+        # Remove rows first
+        if rows_to_remove_indices:
+            sorted_indices = sorted(list(rows_to_remove_indices))
+            print(f"The following {len(sorted_indices)} rows will be removed: {sorted_indices}")
+            user_confirm_rows = input("Confirm row removal? [y/n]: ").lower().strip()
+            if user_confirm_rows == 'y':
+                df.drop(index=sorted_indices, inplace=True)
+                print(f"Removed {len(sorted_indices)} rows.")
+            else:
+                print("Row removal aborted.")
+                # If row removal is aborted, we should not proceed with column removal to maintain integrity
+                print("Column removal also aborted to prevent data inconsistency.")
+                return df
+
+        # Then remove columns
+        print(f"The following columns will be removed: {', '.join(cols_to_remove)}")
+        user_confirm_cols = input("Confirm column removal? [y/n]: ").lower().strip()
+        if user_confirm_cols == 'y':
+            df.drop(columns=cols_to_remove, inplace=True)
+            print(f"Removed {len(cols_to_remove)} columns.")
+        else:
+            print("Column removal aborted.")
+    else:
+        print("No conflicts needed resolution or no changes were made.")
+    
+    return df
